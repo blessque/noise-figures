@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grainy Particle Shape Editor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="min-h-screen">
+    <div class="flex h-screen">
+      <aside class="w-72 bg-[#131316] border-r border-white/10 p-4 space-y-4">
+        <h1 class="text-lg font-semibold">Grainy Editor</h1>
+        <div class="space-y-3">
+          <div>
+            <label class="text-sm">Tools</label>
+            <div class="mt-1 grid grid-cols-4 gap-1" id="toolButtons">
+              <button id="toolMove" class="toolbtn aria-selected bg-black/20 border border-white/10 rounded flex items-center justify-center py-2" title="Move/Transform (V or Esc)"><span class="material-symbols-outlined">open_with</span></button>
+              <button id="toolRect" class="toolbtn bg-black/20 border border-white/10 rounded flex items-center justify-center py-2" title="Rectangle (R)"><span class="material-symbols-outlined">crop_3_2</span></button>
+              <button id="toolEllipse" class="toolbtn bg-black/20 border border-white/10 rounded flex items-center justify-center py-2" title="Ellipse (O)"><span class="material-symbols-outlined">radio_button_unchecked</span></button>
+              <button id="toolPath" class="toolbtn bg-black/20 border border-white/10 rounded flex items-center justify-center py-2" title="Freehand (P)"><span class="material-symbols-outlined">draw</span></button>
+            </div>
+          </div>
+          <div>
+            <label class="text-sm">Particle Count</label>
+            <input id="count" type="range" min="200" max="20000" value="5000" class="w-full" />
+            <div class="text-xs opacity-70"><span id="countVal">5000</span></div>
+          </div>
+          <div>
+            <label class="text-sm">Particle Size</label>
+            <input id="size" type="range" min="0.5" max="4" step="0.1" value="1.5" class="w-full" />
+            <div class="text-xs opacity-70"><span id="sizeVal">1.5</span> px</div>
+          </div>
+          <div>
+            <label class="text-sm">Edge Bias</label>
+            <input id="edgeBias" type="range" min="0" max="1" step="0.01" value="0.7" class="w-full" />
+            <div class="text-xs opacity-70">Favor edges: <span id="edgeBiasVal">0.70</span></div>
+          </div>
+          <div>
+            <label class="text-sm">Edge Falloff</label>
+            <input id="edgeFalloff" type="range" min="1" max="8" step="0.1" value="3" class="w-full" />
+            <div class="text-xs opacity-70">Sharpness: <span id="edgeFalloffVal">3.0</span></div>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="showShape" type="checkbox" class="accent-indigo-500" checked />
+            <label for="showShape" class="text-sm">Show shape guides</label>
+          </div>
+
+          <div id="pathControls" class="hidden">
+            <label class="text-sm">Freehand Smoothness</label>
+            <input id="pathSmooth" type="range" min="0" max="5" step="1" value="1" class="w-full" />
+            <div class="text-xs opacity-70"><span id="pathSmoothVal">1</span> iterations</div>
+          </div>
+          <div>
+            <label class="text-sm">Color</label>
+            <input id="color" type="color" value="#ffffff" class="w-full h-8 bg-black/20 border border-white/10 rounded" />
+          </div>
+          <div>
+            <label class="text-sm">Import SVG</label>
+            <input id="svgFile" type="file" accept=".svg" class="w-full text-xs bg-black/20 border border-white/10 rounded px-2 py-1" />
+            <div class="text-xs opacity-70 mt-1">Or drag & drop SVG files onto the canvas</div>
+          </div>
+          <div class="flex gap-2 pt-2">
+            <button id="regen" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded px-3 py-2 text-sm">Regenerate</button>
+            <button id="clear" class="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded px-3 py-2 text-sm">Clear</button>
+          </div>
+          <div class="flex gap-2 pt-1">
+            <button id="zoomOut" class="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded px-3 py-2 text-sm" title="Zoom Out (-)">−</button>
+            <button id="zoomIn" class="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded px-3 py-2 text-sm" title="Zoom In (+)">+</button>
+          </div>
+          <div class="pt-2 space-y-2">
+            <button id="exportPng" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded px-3 py-2 text-sm">Export PNG</button>
+            <button id="exportSvg" class="w-full bg-teal-600 hover:bg-teal-500 text-white rounded px-3 py-2 text-sm">Export SVG</button>
+          </div>
+        </div>
+        <p class="text-[11px] opacity-60 pt-2">Tip: draw a shape, then press Regenerate.</p>
+      </aside>
+      <main class="flex-1 relative">
+        <div id="canvas-wrap" class="h-full w-full"></div>
+      </main>
+    </div>
+
+    <!-- p5 core and svg plugin (CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+    <script src="https://unpkg.com/p5.js-svg@1.6.0"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+  
+</html>
+
