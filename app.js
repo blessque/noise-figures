@@ -17,42 +17,167 @@ const state = {
 };
 
 function parseSVGPath(pathData) {
-  // Simple SVG path parser - converts path data to point arrays
+  // Comprehensive SVG path parser with proper command support
   const points = [];
   const commands = pathData.match(/[MmLlHhVvCcSsQqTtAaZz][^MmLlHhVvCcSsQqTtAaZz]*/g) || [];
   
   let currentX = 0, currentY = 0;
   let startX = 0, startY = 0;
+  let prevControlX = 0, prevControlY = 0;
+  let prevCmd = '';
   
   for (const cmd of commands) {
     const type = cmd[0];
     const coords = cmd.slice(1).trim().split(/[\s,]+/).filter(x => x).map(Number);
+    const isRelative = type === type.toLowerCase();
     
     switch (type.toLowerCase()) {
-      case 'm': // relative move
-        currentX += coords[0] || 0;
-        currentY += coords[1] || 0;
-        if (type === 'M') { startX = currentX; startY = currentY; }
+      case 'm': // move
+        if (isRelative) {
+          currentX += coords[0] || 0;
+          currentY += coords[1] || 0;
+        } else {
+          currentX = coords[0] || 0;
+          currentY = coords[1] || 0;
+        }
+        startX = currentX;
+        startY = currentY;
+        points.push([currentX, currentY]);
         break;
-      case 'l': // relative line
+        
+      case 'l': // line
         for (let i = 0; i < coords.length; i += 2) {
-          currentX += coords[i] || 0;
-          currentY += coords[i + 1] || 0;
+          if (isRelative) {
+            currentX += coords[i] || 0;
+            currentY += coords[i + 1] || 0;
+          } else {
+            currentX = coords[i] || 0;
+            currentY = coords[i + 1] || 0;
+          }
           points.push([currentX, currentY]);
         }
         break;
+        
       case 'h': // horizontal line
-        currentX += coords[0] || 0;
+        if (isRelative) {
+          currentX += coords[0] || 0;
+        } else {
+          currentX = coords[0] || 0;
+        }
         points.push([currentX, currentY]);
         break;
+        
       case 'v': // vertical line
-        currentY += coords[0] || 0;
+        if (isRelative) {
+          currentY += coords[0] || 0;
+        } else {
+          currentY = coords[0] || 0;
+        }
         points.push([currentX, currentY]);
         break;
+        
+      case 'c': // cubic bezier
+        for (let i = 0; i < coords.length; i += 6) {
+          const x1 = isRelative ? currentX + (coords[i] || 0) : (coords[i] || 0);
+          const y1 = isRelative ? currentY + (coords[i+1] || 0) : (coords[i+1] || 0);
+          const x2 = isRelative ? currentX + (coords[i+2] || 0) : (coords[i+2] || 0);
+          const y2 = isRelative ? currentY + (coords[i+3] || 0) : (coords[i+3] || 0);
+          const x = isRelative ? currentX + (coords[i+4] || 0) : (coords[i+4] || 0);
+          const y = isRelative ? currentY + (coords[i+5] || 0) : (coords[i+5] || 0);
+          
+          // Approximate bezier with line segments
+          const steps = 10;
+          for (let t = 1; t <= steps; t++) {
+            const u = t / steps;
+            const u2 = u * u;
+            const u3 = u2 * u;
+            const v = 1 - u;
+            const v2 = v * v;
+            const v3 = v2 * v;
+            const px = v3*currentX + 3*v2*u*x1 + 3*v*u2*x2 + u3*x;
+            const py = v3*currentY + 3*v2*u*y1 + 3*v*u2*y2 + u3*y;
+            points.push([px, py]);
+          }
+          prevControlX = x2;
+          prevControlY = y2;
+          currentX = x;
+          currentY = y;
+        }
+        break;
+        
+      case 's': // smooth cubic bezier
+        for (let i = 0; i < coords.length; i += 4) {
+          const x1 = prevCmd.toLowerCase() === 'c' || prevCmd.toLowerCase() === 's' 
+            ? 2*currentX - prevControlX 
+            : currentX;
+          const y1 = prevCmd.toLowerCase() === 'c' || prevCmd.toLowerCase() === 's' 
+            ? 2*currentY - prevControlY 
+            : currentY;
+          const x2 = isRelative ? currentX + (coords[i] || 0) : (coords[i] || 0);
+          const y2 = isRelative ? currentY + (coords[i+1] || 0) : (coords[i+1] || 0);
+          const x = isRelative ? currentX + (coords[i+2] || 0) : (coords[i+2] || 0);
+          const y = isRelative ? currentY + (coords[i+3] || 0) : (coords[i+3] || 0);
+          
+          const steps = 10;
+          for (let t = 1; t <= steps; t++) {
+            const u = t / steps;
+            const u2 = u * u;
+            const u3 = u2 * u;
+            const v = 1 - u;
+            const v2 = v * v;
+            const v3 = v2 * v;
+            const px = v3*currentX + 3*v2*u*x1 + 3*v*u2*x2 + u3*x;
+            const py = v3*currentY + 3*v2*u*y1 + 3*v*u2*y2 + u3*y;
+            points.push([px, py]);
+          }
+          prevControlX = x2;
+          prevControlY = y2;
+          currentX = x;
+          currentY = y;
+        }
+        break;
+        
+      case 'q': // quadratic bezier
+        for (let i = 0; i < coords.length; i += 4) {
+          const x1 = isRelative ? currentX + (coords[i] || 0) : (coords[i] || 0);
+          const y1 = isRelative ? currentY + (coords[i+1] || 0) : (coords[i+1] || 0);
+          const x = isRelative ? currentX + (coords[i+2] || 0) : (coords[i+2] || 0);
+          const y = isRelative ? currentY + (coords[i+3] || 0) : (coords[i+3] || 0);
+          
+          const steps = 10;
+          for (let t = 1; t <= steps; t++) {
+            const u = t / steps;
+            const v = 1 - u;
+            const px = v*v*currentX + 2*v*u*x1 + u*u*x;
+            const py = v*v*currentY + 2*v*u*y1 + u*u*y;
+            points.push([px, py]);
+          }
+          prevControlX = x1;
+          prevControlY = y1;
+          currentX = x;
+          currentY = y;
+        }
+        break;
+        
+      case 'a': // arc (simplified - draws straight line for now)
+        for (let i = 0; i < coords.length; i += 7) {
+          const x = isRelative ? currentX + (coords[i+5] || 0) : (coords[i+5] || 0);
+          const y = isRelative ? currentY + (coords[i+6] || 0) : (coords[i+6] || 0);
+          points.push([x, y]);
+          currentX = x;
+          currentY = y;
+        }
+        break;
+        
       case 'z': // close path
-        if (points.length > 0) points.push([startX, startY]);
+        if (points.length > 0 && (currentX !== startX || currentY !== startY)) {
+          points.push([startX, startY]);
+        }
+        currentX = startX;
+        currentY = startY;
         break;
     }
+    prevCmd = type;
   }
   
   return points.length > 0 ? points : null;
@@ -61,24 +186,65 @@ function parseSVGPath(pathData) {
 function parseSVG(svgText) {
   const parser = new DOMParser();
   const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
-  const svgElement = svgDoc.querySelector('svg');
   
+  // Check for parsing errors
+  const parserError = svgDoc.querySelector('parsererror');
+  if (parserError) {
+    console.error('SVG parsing error:', parserError.textContent);
+    return null;
+  }
+  
+  const svgElement = svgDoc.querySelector('svg');
   if (!svgElement) return null;
   
-  const paths = [];
-  const pathElements = svgElement.querySelectorAll('path');
+  // Get viewBox or width/height for scaling
+  let viewBox = svgElement.getAttribute('viewBox');
+  let vbX = 0, vbY = 0, vbW = 800, vbH = 600;
   
+  if (viewBox) {
+    const parts = viewBox.trim().split(/\s+|,/).map(Number);
+    if (parts.length === 4) {
+      [vbX, vbY, vbW, vbH] = parts;
+    }
+  } else {
+    // Try to get width/height attributes
+    const w = svgElement.getAttribute('width');
+    const h = svgElement.getAttribute('height');
+    if (w) vbW = parseFloat(w);
+    if (h) vbH = parseFloat(h);
+  }
+  
+  // Calculate scale to fit canvas (assuming 800x600 canvas approximately)
+  const canvasW = window._p5Instance?.width || 800;
+  const canvasH = window._p5Instance?.height || 600;
+  const scaleX = canvasW / vbW * 0.8; // 0.8 to add some padding
+  const scaleY = canvasH / vbH * 0.8;
+  const scale = Math.min(scaleX, scaleY);
+  
+  // Center offset
+  const offsetX = (canvasW - vbW * scale) / 2 - vbX * scale;
+  const offsetY = (canvasH - vbH * scale) / 2 - vbY * scale;
+  
+  const paths = [];
+  
+  // Parse path elements
+  const pathElements = svgElement.querySelectorAll('path');
   for (const pathEl of pathElements) {
     const pathData = pathEl.getAttribute('d');
     if (pathData) {
       const points = parseSVGPath(pathData);
       if (points && points.length > 2) {
-        paths.push(points);
+        // Scale and offset points
+        const scaledPoints = points.map(([x, y]) => [
+          x * scale + offsetX,
+          y * scale + offsetY
+        ]);
+        paths.push(scaledPoints);
       }
     }
   }
   
-  // Also check for basic shapes
+  // Parse rect elements
   const rects = svgElement.querySelectorAll('rect');
   for (const rect of rects) {
     const x = parseFloat(rect.getAttribute('x') || 0);
@@ -87,11 +253,16 @@ function parseSVG(svgText) {
     const h = parseFloat(rect.getAttribute('height') || 0);
     if (w > 0 && h > 0) {
       paths.push([
-        [x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]
+        [x * scale + offsetX, y * scale + offsetY],
+        [(x + w) * scale + offsetX, y * scale + offsetY],
+        [(x + w) * scale + offsetX, (y + h) * scale + offsetY],
+        [x * scale + offsetX, (y + h) * scale + offsetY],
+        [x * scale + offsetX, y * scale + offsetY]
       ]);
     }
   }
   
+  // Parse circle elements
   const circles = svgElement.querySelectorAll('circle');
   for (const circle of circles) {
     const cx = parseFloat(circle.getAttribute('cx') || 0);
@@ -101,14 +272,80 @@ function parseSVG(svgText) {
       const points = [];
       for (let i = 0; i < 32; i++) {
         const angle = (i / 32) * Math.PI * 2;
-        points.push([cx + Math.cos(angle) * r, cy + Math.sin(angle) * r]);
+        points.push([
+          (cx + Math.cos(angle) * r) * scale + offsetX,
+          (cy + Math.sin(angle) * r) * scale + offsetY
+        ]);
       }
       paths.push(points);
     }
   }
   
+  // Parse ellipse elements
+  const ellipses = svgElement.querySelectorAll('ellipse');
+  for (const ellipse of ellipses) {
+    const cx = parseFloat(ellipse.getAttribute('cx') || 0);
+    const cy = parseFloat(ellipse.getAttribute('cy') || 0);
+    const rx = parseFloat(ellipse.getAttribute('rx') || 0);
+    const ry = parseFloat(ellipse.getAttribute('ry') || 0);
+    if (rx > 0 && ry > 0) {
+      const points = [];
+      for (let i = 0; i < 32; i++) {
+        const angle = (i / 32) * Math.PI * 2;
+        points.push([
+          (cx + Math.cos(angle) * rx) * scale + offsetX,
+          (cy + Math.sin(angle) * ry) * scale + offsetY
+        ]);
+      }
+      paths.push(points);
+    }
+  }
+  
+  // Parse polygon elements
+  const polygons = svgElement.querySelectorAll('polygon');
+  for (const polygon of polygons) {
+    const pointsAttr = polygon.getAttribute('points');
+    if (pointsAttr) {
+      const coords = pointsAttr.trim().split(/\s+|,/).map(Number);
+      const points = [];
+      for (let i = 0; i < coords.length; i += 2) {
+        points.push([
+          coords[i] * scale + offsetX,
+          coords[i + 1] * scale + offsetY
+        ]);
+      }
+      if (points.length > 2) {
+        points.push(points[0]); // close the polygon
+        paths.push(points);
+      }
+    }
+  }
+  
+  // Parse polyline elements
+  const polylines = svgElement.querySelectorAll('polyline');
+  for (const polyline of polylines) {
+    const pointsAttr = polyline.getAttribute('points');
+    if (pointsAttr) {
+      const coords = pointsAttr.trim().split(/\s+|,/).map(Number);
+      const points = [];
+      for (let i = 0; i < coords.length; i += 2) {
+        points.push([
+          coords[i] * scale + offsetX,
+          coords[i + 1] * scale + offsetY
+        ]);
+      }
+      if (points.length > 2) {
+        paths.push(points);
+      }
+    }
+  }
+  
+  console.log(`Parsed SVG: ${paths.length} shapes, viewBox: ${vbX},${vbY},${vbW},${vbH}, scale: ${scale.toFixed(2)}`);
+  
   return paths.length > 0 ? paths : null;
 }
+  
+
 
 function addSVGShapes(svgPaths) {
   if (!svgPaths) return;
